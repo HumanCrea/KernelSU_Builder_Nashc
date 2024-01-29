@@ -1,0 +1,88 @@
+# Travis Ci arch
+arch:
+  - amd64
+
+# Travis Ci os
+os:
+  - linux
+
+# Travis Ci dist
+dist: jammy
+
+# Travis Ci language
+language: c
+
+# Travis Ci compiler
+compiler:
+  - clang
+
+# Travis Ci compiler cache
+cache: false
+
+# Travis Ci environment Variables
+env:
+  global:
+    - ARCH=arm64
+    - KBUILD_BUILD_HOST=Travis-CI
+    - KBUILD_BUILD_USER="HowWof Kernel Auto Builder"
+  jobs:
+    - VERSION="LineageOS-20" KSU="false"
+    - VERSION="LineageOS-20" KSU="true"
+    - VERSION="LineageOS-20-Polly" KSU="false"
+    - VERSION="LineageOS-20-Polly" KSU="true"
+    - VERSION="Zenitsu" KSU="false"
+    - VERSION="Zenitsu" KSU="true"
+    - VERSION="Zenitsu-Polly" KSU="false"
+    - VERSION="Zenitsu-Polly" KSU="true"
+
+# Install needed packages for building
+addons:
+  apt:
+    packages:
+      - zip lib32z-dev libghc-bzlib-dev pngcrush ^liblzma.* python-is-python3 libsdl1.2-dev autoconf libxml2-utils wget pkg-config unzip w3m gawk imagemagick libc6-dev gcc-multilib patchelf gzip clang subversion optipng device-tree-compiler ccache gcc ^liblz4-.* lzip rsync automake fastboot python2.7 patch zip pngquant expat lzop libswitch-perl make libcap-dev python2 adb libxml2 bison libxml-simple-perl zlib1g-dev libarchive-tools libtool squashfs-tools gperf ^lzma.* libfl-dev ncurses-dev pwgen flex libtinfo5 minicom liblz4-tool libmpfr-dev libssl-dev lib32ncurses5-dev libbz2-dev lib32z1-dev libgmp-dev git libncurses5-dev dpkg-dev libmpc-dev lftp python2-dev python3 rar git-lfs policycoreutils unrar libncurses5 libbz2-1.0 ncftp tree python-all-dev bzip2 bc ftp software-properties-common tar libgl1-mesa-dev texinfo schedtool curl libexpat1-dev llvm libc6-dev-i386 apt-utils cmake g++-multilib build-essential re2c axel maven xsltproc g++ libx11-dev libxml-sax-base-perl gnupg bash
+    update: true
+  snaps:
+    - yq
+    - jq
+
+# Travis Ci before script
+before_script:
+  - chmod +x clone.sh
+  - ./clone.sh
+  - cd kernel
+
+# Travis Ci build script
+script:
+  - ARCH=arm64 CROSS_COMPILE="${PWD}/clang/bin/aarch64-linux-gnu-" CROSS_COMPILE_COMPAT="${PWD}/clang/bin/arm-linux-gnueabi" CROSS_COMPILE_ARM32="${PWD}/clang/bin/arm-linux-gnueabi-" CLANG_TRIPLE=aarch64-linux-gnu- make -j$(nproc --all) LLVM=1 LLVM_IAS=1 LD=ld.lld AR=llvm-ar NM=llvm-nm AS=llvm-as OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip O=out
+
+# Travis Ci after success script
+after_success:
+  - git clone https://${GH_TOKEN}@github.com/HowWof/KernelSU_Builder_Nashc.git ../repo
+  - git clone --depth=1 https://github.com/HowWof/AnyKernel3.git AnyKernel
+  - cp out/arch/arm64/boot/Image.gz-dtb AnyKernel
+  - cd AnyKernel
+  - sed -i "s/version_of_auto_build_you_flash/$(echo $VERSION)_$(echo $KSU)/g" anykernel.sh
+  - zip -r9 Kernel-${VERSION}-${KSU}-$TRAVIS_BUILD_NUMBER.zip *
+  - mkdir -p ../../repo/rs/${VERSION}/${KSU}/
+  - rm -f ../../repo/rs/${VERSION}/${KSU}/*
+  - mv Kernel-${VERSION}-${KSU}-$TRAVIS_BUILD_NUMBER.zip ../../repo/rs/${VERSION}/${KSU}/
+  - cd ../../repo
+  - git config --global user.email "travis@travis-ci.org"
+  - git config --global user.name "Travis CI"
+  - git add rs/${VERSION}/${KSU}/Kernel-${VERSION}-${KSU}-$TRAVIS_BUILD_NUMBER.zip
+  - git commit -m "[skip travis] Add new kernel build"
+  - git push https://HowWof:${GH_TOKEN_PUSH}@${GH_REF} HEAD:master
+
+# Travis Ci after failure script
+after_failure:
+  - echo "Build failed"
+  - git clone https://${GH_TOKEN}@github.com/HowWof/KernelSU_Builder_Nashc.git repo
+  - cd repo
+  - mkdir -p ./rs/${VERSION}/${KSU}/
+  - rm -f ./rs/${VERSION}/${KSU}/*
+  - touch ./rs/${VERSION}/${KSU}/Build_Failed
+  - git config --global user.email "travis@travis-ci.org"
+  - git config --global user.name "Travis CI"
+  - git add ./rs/${VERSION}/${KSU}/Build_Failed
+  - git commit -m "[skip travis] Add build failed"
+  - git push https://HowWof:${GH_TOKEN_PUSH}@${GH_REF} HEAD:master
